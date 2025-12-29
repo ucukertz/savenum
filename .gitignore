@@ -1,0 +1,35 @@
+frontend/dist
+node_modules/
+.env
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.html
+*.prof
+
+
+# Wails Build Output
+build/bin/
+build/
+.wails/
+
+# Frontend build artifacts
+dist/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
