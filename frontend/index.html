@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Enumerated File Saver</title>
+    <style>
+        :root {
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text: #1f2937;
+            --border: #e5e7eb;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        h2 {
+            margin: 0;
+            text-align: center;
+            color: var(--primary);
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        input {
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--primary);
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+            background: #eff6ff;
+        }
+
+        .drop-zone.dragover {
+            background: #dbeafe;
+            border-color: var(--primary-hover);
+        }
+
+        .drop-zone p {
+            margin: 0;
+            color: #6b7280;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        #statusMsg {
+            text-align: center;
+            font-size: 0.9rem;
+            min-height: 1.25rem;
+        }
+        
+        .success { color: green; }
+        .error { color: red; }
+
+        .row {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Enumerated File Saver</h2>
+
+        <div class="row">
+            <div class="form-group" style="flex: 2;">
+                <label for="baseName">Base Name</label>
+                <input type="text" id="baseName" value="File" placeholder="e.g. File">
+            </div>
+            <div class="form-group" style="flex: 1;">
+                <label for="digits">Digits</label>
+                <input type="number" id="digits" value="4" min="1">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Destination Directory</label>
+            <div class="row">
+                <input type="text" id="destDir" placeholder="Select folder..." readonly="" style="flex: 1;">
+                <button id="btnSelectDir" style="padding: 0.5rem 1rem;">...</button>
+            </div>
+        </div>
+
+        <div class="drop-zone" id="dropZone">
+            <p>Drag file here<br><small>(File Explorer or Browser)</small></p>
+        </div>
+
+        <div id="statusMsg"></div>
+    </div>
+
+    <script src="./wailsjs/go/main/App.js"></script>
+    <script src="./wailsjs/runtime/runtime.js"></script>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const btnSelectDir = document.getElementById('btnSelectDir');
+        const destDirInput = document.getElementById('destDir');
+        const baseNameInput = document.getElementById('baseName');
+        const digitsInput = document.getElementById('digits');
+        const statusMsg = document.getElementById('statusMsg');
+
+        let currentDestDir = "";
+
+        btnSelectDir.addEventListener('click', async () => {
+            try {
+                const result = await window.go.main.App.SelectDirectory();
+                if (result) {
+                    currentDestDir = result;
+                    destDirInput.value = result;
+                }
+            } catch (err) {
+                showStatus(err, 'error');
+            }
+        });
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const items = dt.items;
+
+            if (!currentDestDir) {
+                showStatus("Please select a destination directory first.", 'error');
+                return;
+            }
+
+            const baseName = baseNameInput.value.trim();
+            if (!baseName) {
+                showStatus("Please enter a Base Name.", 'error');
+                return;
+            }
+
+            const digitsCount = parseInt(digitsInput.value, 10);
+            if (isNaN(digitsCount) || digitsCount < 1) {
+                showStatus("Digits must be at least 1.", 'error');
+                return;
+            }
+
+            if (items) {
+                let hasFiles = false;
+
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    if (item.kind === 'file') {
+                        const file = item.getAsFile();
+                        if (file) {
+                            processFileObject(file, digitsCount);
+                            hasFiles = true;
+                        }
+                    }
+                }
+
+                if (!hasFiles) {
+                    for (let i = 0; i < items.length; i++) {
+                        const item = items[i];
+                        if (item.kind === 'string') {
+                            item.getAsString((str) => {
+                                if (str.startsWith('http')) {
+                                    processURL(str, digitsCount);
+                                }
+                            });
+                        }
+                    }
+                }
+
+            } else {
+                const files = dt.files;
+                if (files && files.length > 0) {
+                    for (let i = 0; i < files.length; i++) {
+                        processFileObject(files[i], digitsCount);
+                    }
+                }
+            }
+        }
+
+        function processFileObject(file, digitsCount) {
+            showStatus("Processing...", "neutral");
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(file);
+            reader.onloadend = async function() {
+                const arrayBuffer = reader.result;
+                const dataArray = Array.from(new Uint8Array(arrayBuffer));
+                
+                try {
+                    const result = await window.go.main.App.SaveFile(
+                        currentDestDir,
+                        baseNameInput.value,
+                        digitsCount,      
+                        file.name,
+                        dataArray,   
+                        ""          
+                    );
+                    showStatus(`Saved as: ${result}`, 'success');
+                } catch (err) {
+                    showStatus(`Error: ${err}`, 'error');
+                    console.error(err);
+                }
+            }
+        }
+
+        async function processURL(url, digitsCount) {
+            showStatus("Downloading...", "neutral");
+            try {
+                const result = await window.go.main.App.SaveFile(
+                    currentDestDir,
+                    baseNameInput.value,
+                    digitsCount,      
+                    "download.jpg", 
+                    [],             
+                    url             
+                );
+                showStatus(`Saved as: ${result}`, 'success');
+            } catch (err) {
+                showStatus(`Error: ${err}`, 'error');
+            }
+        }
+
+        function showStatus(msg, type) {
+            statusMsg.textContent = msg;
+            statusMsg.className = type;
+            if (type === 'success') {
+                setTimeout(() => { statusMsg.textContent = ''; }, 5000);
+            }
+        }
+    </script>
+
+</body>
+</html>
